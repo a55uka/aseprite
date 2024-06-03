@@ -75,5 +75,5 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: aseprite-${{ matrix.os }}
+        name: aseprite-${{ matrix.os }}-${{ matrix.build_type }}-debug${{ matrix.enable_ui }}
         path: build/
