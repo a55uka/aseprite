@@ -22,101 +22,115 @@
 
 namespace doc {
 
-  class Brush;
-  using BrushRef = std::shared_ptr<Brush>;
+enum class SymmetryIndex {
+  ORIGINAL = 0,
+  FLIPPED_X = 1,
+  FLIPPED_Y = 2,
+  FLIPPED_XY = 3,
+  ROTATED_270 = 4,
+  ROT_FLIP_90 = 5,
+  ROTATED_90 = 6,
+  ROT_FLIP_270 = 7,
+  ELEMENTS = 8
+};
 
-  class Brush {
-  public:
-    static const int kMinBrushSize = 1;
-    static const int kMaxBrushSize = 64;
+class Brush;
+using BrushRef = std::shared_ptr<Brush>;
 
-    enum class ImageColor { MainColor, BackgroundColor, BothColors };
+class Brush {
+public:
+  static const int kMinBrushSize = 1;
+  static const int kMaxBrushSize = 64;
 
-    Brush();
-    Brush(BrushType type, int size, int angle);
-    ~Brush();
+  enum class ImageColor { MainColor, BackgroundColor, BothColors };
 
-    // Don't offer copy constructor/operator, use clone*() functions
-    // instead.
-    Brush(const Brush&) = delete;
-    Brush& operator=(const Brush&) = delete;
+  Brush();
+  Brush(BrushType type, int size, int angle);
+  ~Brush();
 
-    // Cloned brushes can share the same image until
-    // setSize()/Angle()/etc. (regenerate()) is called for the new
-    // brush. In that case the original brush and the cloned one will
-    // have a different image after all.
-    BrushRef cloneWithSharedImages() const;
-    BrushRef cloneWithNewImages() const;
-    BrushRef cloneWithExistingImages(const ImageRef& image,
-                                     const ImageRef& maskBitmap) const;
+  // Don't offer copy constructor/operator, use clone*() functions
+  // instead.
+  Brush(const Brush&) = delete;
+  Brush& operator=(const Brush&) = delete;
 
-    BrushType type() const { return m_type; }
-    int size() const { return m_size; }
-    int angle() const { return m_angle; }
-    Image* image() const { return m_image.get(); }
-    Image* maskBitmap() const { return m_maskBitmap.get(); }
-    int gen() const { return m_gen; }
+  // Cloned brushes can share the same image until
+  // setSize()/Angle()/etc. (regenerate()) is called for the new
+  // brush. In that case the original brush and the cloned one will
+  // have a different image after all.
+  BrushRef cloneWithSharedImages() const;
+  BrushRef cloneWithNewImages() const;
+  BrushRef cloneWithExistingImages(const ImageRef& image, const ImageRef& maskBitmap) const;
 
-    BrushPattern pattern() const { return m_pattern; }
-    gfx::Point patternOrigin() const { return m_patternOrigin; }
-    Image* patternImage() const { return m_patternImage.get(); }
+  BrushType type() const { return m_type; }
+  int size() const { return m_size; }
+  int angle() const { return m_angle; }
+  Image* image() const { return m_image.get(); }
+  Image* maskBitmap() const { return m_maskBitmap.get(); }
+  int gen() const { return m_gen; }
 
-    const gfx::Rect& bounds() const { return m_bounds; }
-    const gfx::Point& center() const { return m_center; }
+  BrushPattern pattern() const { return m_pattern; }
+  gfx::Point patternOrigin() const { return m_patternOrigin; }
+  Image* patternImage() const { return m_patternImage.get(); }
 
-    void setSize(int size);
-    void setAngle(int angle);
-    void setImage(const Image* image,
-                  const Image* maskBitmap);
+  const gfx::Rect& bounds() const { return m_bounds; }
+  const gfx::Point& center() const { return m_center; }
 
-    // Special functions to change the colors of the image or restore
-    // the colors to the original image used to create the brush.
-    void setImageColor(ImageColor imageColor, color_t color);
-    void resetImageColors();
+  void setSize(int size);
+  void setAngle(int angle);
+  void setImage(const Image* image, const Image* maskBitmap);
 
-    void setPattern(BrushPattern pattern) {
-      m_pattern = pattern;
-    }
-    void setPatternOrigin(const gfx::Point& patternOrigin) {
-      m_patternOrigin = patternOrigin;
-    }
-    void setPatternImage(ImageRef& patternImage) {
-      m_patternImage = patternImage;
-    }
-    void setCenter(const gfx::Point& center);
+  // Special functions to change the colors of the image or restore
+  // the colors to the original image used to create the brush.
+  void setImageColor(ImageColor imageColor, color_t color);
+  void resetImageColors();
 
-    // Returns the original image used to create the brush before
-    // calling any setImageColor()
-    Image* originalImage() const {
-      if (m_backupImage)
-        return m_backupImage.get();
-      return m_image.get();
-    }
+  void setPattern(BrushPattern pattern) { m_pattern = pattern; }
+  void setPatternOrigin(const gfx::Point& patternOrigin) { m_patternOrigin = patternOrigin; }
+  void setPatternImage(ImageRef& patternImage) { m_patternImage = patternImage; }
+  void setCenter(const gfx::Point& center);
 
-  private:
-    void clean();
-    void regenerate();
-    void regenerateMaskBitmap();
-    void resetBounds();
-    void copyFieldsFromBrush(const Brush& brush);
+  // Returns the original image used to create the brush before
+  // calling any setImageColor()
+  Image* originalImage() const
+  {
+    if (m_backupImage)
+      return m_backupImage.get();
+    return m_image.get();
+  }
 
-    BrushType m_type;                     // Type of brush
-    int m_size;                           // Size (diameter)
-    int m_angle;                          // Angle in degrees 0-360
-    ImageRef m_image;                     // Image of the brush
-    ImageRef m_maskBitmap;
-    gfx::Rect m_bounds;
-    gfx::Point m_center;
-    BrushPattern m_pattern;               // How the image should be replicated
-    gfx::Point m_patternOrigin;           // From what position the brush was taken
-    ImageRef m_patternImage;
-    int m_gen;
+  void resetSymmetries();
+  void reserveSymmetries();
+  Image* getSymmetryImage(const SymmetryIndex index);
+  Image* getSymmetryMask(const SymmetryIndex index);
 
-    // Extra data used for setImageColor()
-    ImageRef m_backupImage; // Backup image to avoid losing original brush colors/pattern
-    std::optional<color_t> m_mainColor; // Main image brush color
-    std::optional<color_t> m_bgColor;   // Background color
-  };
+private:
+  void clean();
+  void regenerate();
+  void regenerateMaskBitmap();
+  void resetBounds();
+  void copyFieldsFromBrush(const Brush& brush);
+
+  BrushType m_type; // Type of brush
+  int m_size;       // Size (diameter)
+  int m_angle;      // Angle in degrees 0-360
+  ImageRef m_image; // Image of the brush
+  ImageRef m_maskBitmap;
+  gfx::Rect m_bounds;
+  gfx::Point m_center;
+  BrushPattern m_pattern;     // How the image should be replicated
+  gfx::Point m_patternOrigin; // From what position the brush was taken
+  ImageRef m_patternImage;
+  int m_gen;
+
+  // Symmetry image/mask buffers
+  std::vector<ImageRef> m_symmetryImages;
+  std::vector<ImageRef> m_symmetryMasks;
+
+  // Extra data used for setImageColor()
+  ImageRef m_backupImage;             // Backup image to avoid losing original brush colors/pattern
+  std::optional<color_t> m_mainColor; // Main image brush color
+  std::optional<color_t> m_bgColor;   // Background color
+};
 
 } // namespace doc
 

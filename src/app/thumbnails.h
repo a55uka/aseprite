@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2019-2020  Igara Studio S.A.
+// Copyright (C) 2019-2025  Igara Studio S.A.
 // Copyright (C) 2016  Carlo Caputo
 //
 // This program is distributed under the terms of
@@ -13,20 +13,19 @@
 #include "os/surface.h"
 
 namespace doc {
-  class Cel;
+class Cel;
 }
 
 namespace os {
-  class Surface;
+class Surface;
 }
 
-namespace app {
-namespace thumb {
+namespace app { namespace thumb {
 
-  os::SurfaceRef get_cel_thumbnail(const doc::Cel* cel,
-                                   const gfx::Size& fitInSize);
+os::SurfaceRef get_cel_thumbnail(const doc::Cel* cel,
+                                 const bool scaleUpToFit,
+                                 const gfx::Size& fitInSize);
 
-} // thumb
-} // app
+}} // namespace app::thumb
 
 #endif

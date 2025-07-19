@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -38,8 +38,7 @@ protected:
   void onExecute(Context* context) override;
 };
 
-MaskContentCommand::MaskContentCommand()
-  : Command(CommandId::MaskContent(), CmdRecordableFlag)
+MaskContentCommand::MaskContentCommand() : Command(CommandId::MaskContent(), CmdRecordableFlag)
 {
 }
 
@@ -63,7 +62,7 @@ void MaskContentCommand::onExecute(Context* context)
     gfx::Color color;
     if (writer.layer()->isBackground()) {
       ColorPicker picker;
-      picker.pickColor(*writer.site(),
+      picker.pickColor(writer.site(),
                        gfx::PointF(0.0, 0.0),
                        Editor::activeEditor()->projection(),
                        ColorPicker::FromComposition);
@@ -88,8 +87,8 @@ void MaskContentCommand::onExecute(Context* context)
   }
 
   // Select marquee tool
-  if (tools::Tool* tool = App::instance()->toolBox()
-      ->getToolById(tools::WellKnownTools::RectangularMarquee)) {
+  if (tools::Tool* tool = App::instance()->toolBox()->getToolById(
+        tools::WellKnownTools::RectangularMarquee)) {
     ToolBar::instance()->selectTool(tool);
   }
 

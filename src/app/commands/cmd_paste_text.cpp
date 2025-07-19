@@ -1,25 +1,24 @@
 // Aseprite
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2025  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
+#include "app/color_utils.h"
 #include "app/commands/command.h"
 #include "app/console.h"
 #include "app/context.h"
-#include "app/file_selector.h"
 #include "app/pref/preferences.h"
 #include "app/ui/drop_down_button.h"
 #include "app/ui/editor/editor.h"
-#include "app/ui/font_popup.h"
 #include "app/ui/timeline/timeline.h"
-#include "app/util/freetype_utils.h"
+#include "app/util/render_text.h"
 #include "base/fs.h"
 #include "base/string.h"
 #include "doc/image.h"
@@ -44,8 +43,7 @@ protected:
   void onExecute(Context* ctx) override;
 };
 
-PasteTextCommand::PasteTextCommand()
-  : Command(CommandId::PasteText(), CmdUIOnlyFlag)
+PasteTextCommand::PasteTextCommand() : Command(CommandId::PasteText(), CmdUIOnlyFlag)
 {
 }
 
@@ -57,84 +55,13 @@ bool PasteTextCommand::onEnabled(Context* ctx)
 
 class PasteTextWindow : public app::gen::PasteText {
 public:
-  PasteTextWindow(const std::string& face, int size,
-                  bool antialias,
-                  const app::Color& color)
-    : m_face(face) {
-    ok()->setEnabled(!m_face.empty());
-    if (!m_face.empty())
-      updateFontFaceButton();
-
-    fontSize()->setTextf("%d", size);
-    fontFace()->Click.connect([this]{ onSelectFontFile(); });
-    fontFace()->DropDownClick.connect([this]{ onSelectSystemFont(); });
+  PasteTextWindow(const FontInfo& fontInfo, const app::Color& color)
+  {
+    fontFace()->setInfo(fontInfo, FontEntry::From::Init);
     fontColor()->setColor(color);
-    this->antialias()->setSelected(antialias);
   }
 
-  std::string faceValue() const {
-    return m_face;
-  }
-
-  int sizeValue() const {
-    int size = fontSize()->textInt();
-    size = std::clamp(size, 1, 5000);
-    return size;
-  }
-
-private:
-  void updateFontFaceButton() {
-    fontFace()->mainButton()
-      ->setTextf("Select Font: %s",
-                 base::get_file_title(m_face).c_str());
-  }
-
-  void onSelectFontFile() {
-    base::paths exts = { "ttf", "ttc", "otf", "dfont" };
-    base::paths face;
-    if (!show_file_selector(
-          "Select a TrueType Font",
-          m_face, exts,
-          FileSelectorType::Open, face))
-      return;
-
-    ASSERT(!face.empty());
-    setFontFace(face.front());
-  }
-
-  void setFontFace(const std::string& face) {
-    m_face = face;
-    ok()->setEnabled(true);
-    updateFontFaceButton();
-  }
-
-  void onSelectSystemFont() {
-    if (!m_fontPopup) {
-      try {
-        m_fontPopup.reset(new FontPopup());
-        m_fontPopup->Load.connect(&PasteTextWindow::setFontFace, this);
-        m_fontPopup->Close.connect([this]{ onCloseFontPopup(); });
-      }
-      catch (const std::exception& ex) {
-        Console::showException(ex);
-        return;
-      }
-    }
-
-    if (!m_fontPopup->isVisible()) {
-      m_fontPopup->showPopup(display(), fontFace()->bounds());
-    }
-    else {
-      m_fontPopup->closeWindow(NULL);
-    }
-  }
-
-  void onCloseFontPopup() {
-    fontFace()->dropDown()->requestFocus();
-  }
-
-  std::string m_face;
-  std::unique_ptr<FontPopup> m_fontPopup;
+  FontInfo fontInfo() const { return fontFace()->info(); }
 };
 
 void PasteTextCommand::onExecute(Context* ctx)
@@ -144,10 +71,8 @@ void PasteTextCommand::onExecute(Context* ctx)
     return;
 
   Preferences& pref = Preferences::instance();
-  PasteTextWindow window(pref.textTool.fontFace(),
-                         pref.textTool.fontSize(),
-                         pref.textTool.antialias(),
-                         pref.colorBar.fgColor());
+  FontInfo fontInfo = FontInfo::getFromPreferences();
+  PasteTextWindow window(fontInfo, pref.colorBar.fgColor());
 
   window.userText()->setText(last_text_used);
 
@@ -157,34 +82,29 @@ void PasteTextCommand::onExecute(Context* ctx)
 
   last_text_used = window.userText()->text();
 
-  bool antialias = window.antialias()->isSelected();
-  std::string faceName = window.faceValue();
-  int size = window.sizeValue();
-  size = std::clamp(size, 1, 999);
-  pref.textTool.fontFace(faceName);
-  pref.textTool.fontSize(size);
-  pref.textTool.antialias(antialias);
+  fontInfo = window.fontInfo();
+  fontInfo.updatePreferences();
 
   try {
     std::string text = window.userText()->text();
-    app::Color appColor = window.fontColor()->getColor();
-    doc::color_t color = doc::rgba(appColor.getRed(),
-                                   appColor.getGreen(),
-                                   appColor.getBlue(),
-                                   appColor.getAlpha());
+    app::Color color = window.fontColor()->getColor();
 
-    doc::ImageRef image(render_text(faceName, size, text, color, antialias));
+    ui::Paint paint = window.fontFace()->paint();
+    paint.color(color_utils::color_for_ui(color));
+
+    doc::ImageRef image = render_text(fontInfo, text, paint);
     if (image) {
       Sprite* sprite = editor->sprite();
       if (image->pixelFormat() != sprite->pixelFormat()) {
         RgbMap* rgbmap = sprite->rgbMap(editor->frame());
-        image.reset(
-          render::convert_pixel_format(
-            image.get(), NULL, sprite->pixelFormat(),
-            render::Dithering(),
-            rgbmap, sprite->palette(editor->frame()),
-            false,
-            sprite->transparentColor()));
+        image.reset(render::convert_pixel_format(image.get(),
+                                                 NULL,
+                                                 sprite->pixelFormat(),
+                                                 render::Dithering(),
+                                                 rgbmap,
+                                                 sprite->palette(editor->frame()),
+                                                 false,
+                                                 sprite->transparentColor()));
       }
 
       // TODO we don't support pasting text in multiple cels at the

@@ -18,10 +18,11 @@
 
 #include <vector>
 
-namespace gfx { class Region; }
+namespace gfx {
+class Region;
+}
 
-namespace app {
-namespace tools {
+namespace app { namespace tools {
 
 class ToolLoop;
 
@@ -99,13 +100,11 @@ private:
   Pointer m_lastPointer;
   gfx::Region m_dirtyArea;
   gfx::Region m_nextDirtyArea;
-  const int m_brushSize0;
-  const int m_brushAngle0;
   DynamicsOptions m_dynamics;
   gfx::PointF m_stabilizerCenter;
+  doc::Brush* m_brush0 = nullptr;
 };
 
-} // namespace tools
-} // namespace app
+}} // namespace app::tools
 
 #endif

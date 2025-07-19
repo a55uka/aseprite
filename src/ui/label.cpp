@@ -6,10 +6,9 @@
 // Read LICENSE.txt for more information.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
-#include "os/font.h"
 #include "ui/label.h"
 #include "ui/message.h"
 #include "ui/size_hint_event.h"
@@ -17,8 +16,7 @@
 
 namespace ui {
 
-Label::Label(const std::string& text)
-  : Widget(kLabelWidget)
+Label::Label(const std::string& text) : Widget(kLabelWidget)
 {
   enableFlags(IGNORE_MOUSE);
   setAlign(LEFT | MIDDLE);

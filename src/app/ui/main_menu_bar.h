@@ -14,16 +14,18 @@
 
 namespace app {
 
-  class MainMenuBar : public ui::MenuBar {
-  public:
-    MainMenuBar();
+class MainMenuBar : public ui::MenuBar {
+public:
+  MainMenuBar();
 
-    void reload();
+  void queueReload();
+  void reload();
 
-  private:
-    obs::scoped_connection m_extKeys;
-    obs::scoped_connection m_extScripts;
-  };
+private:
+  obs::scoped_connection m_extKeys;
+  obs::scoped_connection m_extScripts;
+  bool m_queuedReload = false;
+};
 
 } // namespace app
 

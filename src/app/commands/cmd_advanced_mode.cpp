@@ -1,11 +1,12 @@
 // Aseprite
+// Copyright (C) 2025  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -31,8 +32,7 @@ protected:
   void onExecute(Context* context) override;
 };
 
-AdvancedModeCommand::AdvancedModeCommand()
-  : Command(CommandId::AdvancedMode(), CmdUIOnlyFlag)
+AdvancedModeCommand::AdvancedModeCommand() : Command(CommandId::AdvancedMode(), CmdUIOnlyFlag)
 {
 }
 
@@ -44,29 +44,22 @@ void AdvancedModeCommand::onExecute(Context* context)
   MainWindow::Mode newMode = oldMode;
 
   switch (oldMode) {
-    case MainWindow::NormalMode:
-      newMode = MainWindow::ContextBarAndTimelineMode;
-      break;
-    case MainWindow::ContextBarAndTimelineMode:
-      newMode = MainWindow::EditorOnlyMode;
-      break;
-    case MainWindow::EditorOnlyMode:
-      newMode = MainWindow::NormalMode;
-      break;
+    case MainWindow::NormalMode:                newMode = MainWindow::ContextBarAndTimelineMode; break;
+    case MainWindow::ContextBarAndTimelineMode: newMode = MainWindow::EditorOnlyMode; break;
+    case MainWindow::EditorOnlyMode:            newMode = MainWindow::NormalMode; break;
   }
 
   mainWindow->setMode(newMode);
 
   auto& pref = Preferences::instance();
 
-  if (oldMode == MainWindow::NormalMode &&
-      pref.advancedMode.showAlert()) {
+  if (oldMode == MainWindow::NormalMode && pref.advancedMode.showAlert()) {
     KeyPtr key = KeyboardShortcuts::instance()->command(this->id().c_str());
-    if (!key->accels().empty()) {
+    if (!key->shortcuts().empty()) {
       app::gen::AdvancedMode window;
 
       window.warningLabel()->setTextf("You can go back pressing \"%s\" key.",
-        key->accels().front().toString().c_str());
+                                      key->shortcuts().front().toString().c_str());
 
       window.openWindowInForeground();
 

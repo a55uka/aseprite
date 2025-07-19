@@ -6,7 +6,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -25,14 +25,12 @@
 #include "app/ui/status_bar.h"
 #include "app/ui/timeline/timeline.h"
 #include "app/ui/toolbar.h"
-#include "app/util/range_utils.h"
 #include "base/convert_to.h"
 #include "doc/cel.h"
 #include "doc/cels_range.h"
 #include "doc/image.h"
 #include "doc/mask.h"
 #include "doc/sprite.h"
-#include "fmt/format.h"
 #include "ui/ui.h"
 
 namespace app {
@@ -43,22 +41,24 @@ class RotateJob : public SpriteJob {
   bool m_rotateSprite;
 
 public:
-
-  RotateJob(Context* ctx, Doc* doc,
+  RotateJob(Context* ctx,
+            Doc* doc,
             const std::string& jobName,
-            int angle, const CelList& cels,
+            int angle,
+            const CelList& cels,
             const bool rotateSprite,
             const bool showProgress)
     : SpriteJob(ctx, doc, jobName, showProgress)
     , m_cels(cels)
-    , m_rotateSprite(rotateSprite) {
+    , m_rotateSprite(rotateSprite)
+  {
     m_angle = angle;
   }
 
 protected:
-
   template<typename T>
-  void rotate_rect(gfx::RectT<T>& newBounds) {
+  void rotate_rect(gfx::RectT<T>& newBounds)
+  {
     const gfx::RectT<T> bounds = newBounds;
     switch (m_angle) {
       case 180:
@@ -81,7 +81,8 @@ protected:
   }
 
   // [working thread]
-  void onSpriteJob(Tx& tx) override {
+  void onSpriteJob(Tx& tx) override
+  {
     DocApi api = document()->getApi(tx);
 
     // 1) Rotate cel positions
@@ -110,8 +111,8 @@ protected:
       Image* image = cel->image();
       if (image) {
         ImageRef new_image(Image::create(image->pixelFormat(),
-            m_angle == 180 ? image->width(): image->height(),
-            m_angle == 180 ? image->height(): image->width()));
+                                         m_angle == 180 ? image->width() : image->height(),
+                                         m_angle == 180 ? image->height() : image->width()));
         new_image->setMaskColor(image->maskColor());
 
         doc::rotate_image(image, new_image.get(), m_angle);
@@ -123,7 +124,7 @@ protected:
 
       // cancel all the operation?
       if (isCanceled())
-        return;        // Tx destructor will undo all operations
+        return; // Tx destructor will undo all operations
     }
 
     // rotate mask
@@ -149,10 +150,10 @@ protected:
       }
 
       // create the new rotated mask
-      new_mask->replace(
-        gfx::Rect(x, y,
-          m_angle == 180 ? origBounds.w: origBounds.h,
-          m_angle == 180 ? origBounds.h: origBounds.w));
+      new_mask->replace(gfx::Rect(x,
+                                  y,
+                                  m_angle == 180 ? origBounds.w : origBounds.h,
+                                  m_angle == 180 ? origBounds.h : origBounds.w));
       doc::rotate_image(origMask->bitmap(), new_mask->bitmap(), m_angle);
 
       // Copy new mask
@@ -163,11 +164,9 @@ protected:
     if (m_rotateSprite && m_angle != 180)
       api.setSpriteSize(sprite(), sprite()->height(), sprite()->width());
   }
-
 };
 
-RotateCommand::RotateCommand()
-  : Command(CommandId::Rotate(), CmdRecordableFlag)
+RotateCommand::RotateCommand() : Command(CommandId::Rotate(), CmdRecordableFlag)
 {
   m_ui = true;
   m_flipMask = false;
@@ -213,8 +212,8 @@ void RotateCommand::onExecute(Context* context)
       // now PixelsMovement support ranges).
       if (doc->isMaskVisible()) {
         // Select marquee tool
-        if (tools::Tool* tool = App::instance()->toolBox()
-            ->getToolById(tools::WellKnownTools::RectangularMarquee)) {
+        if (tools::Tool* tool = App::instance()->toolBox()->getToolById(
+              tools::WellKnownTools::RectangularMarquee)) {
           ToolBar::instance()->selectTool(tool);
           if (auto editor = Editor::activeEditor())
             editor->startSelectionTransformation(gfx::Point(0, 0), m_angle);
@@ -222,26 +221,15 @@ void RotateCommand::onExecute(Context* context)
         }
       }
 
-      auto range = App::instance()->timeline()->range();
-      if (range.enabled())
-        cels = get_unique_cels_to_edit_pixels(site.sprite(), range);
-      else if (site.cel() &&
-               site.layer() &&
-               site.layer()->canEditPixels()) {
-        cels.push_back(site.cel());
-      }
-
+      cels = site.selectedUniqueCelsToEditPixels();
       if (cels.empty()) {
-        StatusBar::instance()->showTip(
-          1000, Strings::statusbar_tips_all_layers_are_locked());
+        StatusBar::instance()->showTip(1000, Strings::statusbar_tips_all_layers_are_locked());
         return;
       }
     }
     // Flip the whole sprite (even locked layers)
     else if (site.sprite()) {
-      for (Cel* cel : site.sprite()->uniqueCels())
-        cels.push_back(cel);
-
+      cels = site.sprite()->uniqueCels().toList();
       rotateSprite = true;
     }
 
@@ -261,8 +249,7 @@ std::string RotateCommand::onGetFriendlyName() const
     content = Strings::commands_Rotate_Selection();
   else
     content = Strings::commands_Rotate_Sprite();
-  return fmt::format(getBaseFriendlyName(),
-                     content, base::convert_to<std::string>(m_angle));
+  return Strings::commands_Rotate(content, base::convert_to<std::string>(m_angle));
 }
 
 Command* CommandFactory::createRotateCommand()

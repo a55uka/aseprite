@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (c) 2022-2023  Igara Studio S.A.
+// Copyright (c) 2022-2024  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
@@ -15,10 +15,7 @@
 #include "ui/size_hint_event.h"
 #include "ui/system.h"
 
-#ifdef ENABLE_UI
-
-namespace app {
-namespace script {
+namespace app { namespace script {
 
 // static
 ui::WidgetType Canvas::Type()
@@ -55,10 +52,10 @@ void Canvas::callPaint()
   GraphicsContext gc(m_surface, m_autoScaling ? ui::guiscale() : 1);
   if (m_autoScaling) {
     auto theme = skin::SkinTheme::get(this);
-    gc.font(AddRef(theme->getUnscaledFont(font())));
+    gc.font(theme->getUnscaledFont(font()));
   }
   else
-    gc.font(AddRef(font()));
+    gc.font(font());
 
   Paint(gc);
 }
@@ -75,10 +72,11 @@ void Canvas::onInitTheme(ui::InitThemeEvent& ev)
   setBgColor(bg);
 }
 
-template <typename T>
+template<typename T>
 static T makeScaled(T* msg, const gfx::Point& offset)
 {
-  static_assert(std::is_base_of<ui::Message, T>::value, "type parameter must derive from ui::Message");
+  static_assert(std::is_base_of<ui::Message, T>::value,
+                "type parameter must derive from ui::Message");
   auto result = T(msg->type(), *msg, ((msg->position() - offset) / ui::guiscale()) + offset);
   result.setRecipient(static_cast<ui::Message*>(msg)->recipient());
   result.setDisplay(static_cast<ui::Message*>(msg)->display());
@@ -88,7 +86,6 @@ static T makeScaled(T* msg, const gfx::Point& offset)
 bool Canvas::onProcessMessage(ui::Message* msg)
 {
   switch (msg->type()) {
-
     case ui::kKeyDownMessage:
       if (hasFocus()) {
         s_stopKeyEventPropagation = false;
@@ -109,9 +106,7 @@ bool Canvas::onProcessMessage(ui::Message* msg)
       }
       break;
 
-    case ui::kSetCursorMessage:
-      ui::set_mouse_cursor(m_cursorType);
-      return true;
+    case ui::kSetCursorMessage: ui::set_mouse_cursor(m_cursorType); return true;
 
     case ui::kMouseMoveMessage: {
       auto mouseMsg = *static_cast<ui::MouseMessage*>(msg);
@@ -175,7 +170,6 @@ bool Canvas::onProcessMessage(ui::Message* msg)
       TouchMagnify(&touchMsg);
       break;
     }
-
   }
   return ui::Widget::onProcessMessage(msg);
 }
@@ -183,19 +177,19 @@ bool Canvas::onProcessMessage(ui::Message* msg)
 void Canvas::onResize(ui::ResizeEvent& ev)
 {
   Widget::onResize(ev);
-  if (os::instance() && !ev.bounds().isEmpty()) {
+
+  const os::SystemRef system = os::System::instance();
+  if (system && !ev.bounds().isEmpty()) {
     int w = ev.bounds().w;
     int h = ev.bounds().h;
 
     if (m_autoScaling) {
-      w = w/ui::guiscale() + (w % ui::guiscale());
-      h = h/ui::guiscale() + (h % ui::guiscale());
+      w = w / ui::guiscale() + (w % ui::guiscale());
+      h = h / ui::guiscale() + (h % ui::guiscale());
     }
 
-    if (!m_surface ||
-        m_surface->width() != w ||
-        m_surface->height() != h) {
-      m_surface = os::instance()->makeSurface(w, h);
+    if (!m_surface || m_surface->width() != w || m_surface->height() != h) {
+      m_surface = system->makeSurface(w, h);
       callPaint();
     }
   }
@@ -216,7 +210,4 @@ void Canvas::onPaint(ui::PaintEvent& ev)
   }
 }
 
-} // namespace script
-} // namespace app
-
-#endif // ENABLE_UI
+}} // namespace app::script
