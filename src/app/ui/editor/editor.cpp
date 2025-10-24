@@ -58,6 +58,7 @@
 #include "app/util/tile_flags_utils.h"
 #include "base/chrono.h"
 #include "base/convert_to.h"
+#include "base/scoped_value.h"
 #include "doc/doc.h"
 #include "doc/mask_boundaries.h"
 #include "doc/slice.h"
@@ -265,6 +266,23 @@ WidgetType Editor::Type()
 void Editor::setStateInternal(const EditorStatePtr& newState)
 {
   m_brushPreview.hide();
+
+  // Some onLeaveState impls (like the ones from MovingPixelsState,
+  // WritingTextState, MovingSelectionState) might generate a
+  // Tx/Transaction::commit(), which will add a new undo state,
+  // triggering a sprite change scripting event
+  // (SpriteEvents::onAddUndoState). This event could be handled by an
+  // extension and that extension might want to save the current
+  // sprite (e.g. calling Sprite_saveCopyAs, the kind of extension
+  // that takes snapshots after each sprite change). That will be a
+  // new Context::executeCommand() for the save command, generating a
+  // BeforeCommandExecution signal, getting back to onLeaveState
+  // again. In that case, we just ignore the reentry as the first
+  // onLeaveState should handle everything (to avoid an stack
+  // overflow/infinite recursion).
+  if (m_leavingState)
+    return;
+  base::ScopedValue leaving(m_leavingState, true);
 
   // Fire before change state event, set the state, and fire after
   // change state event.
@@ -772,7 +790,15 @@ void Editor::drawOneSpriteUnclippedRect(ui::Graphics* g,
       else
         p.blendMode(os::BlendMode::Src);
 
-      g->drawSurface(rendered.get(), gfx::Rect(0, 0, rc2.w, rc2.h), dest, sampling, &p);
+      gfx::Rect destClip = dest;
+      if (m_proj.scaleX() < 1.0)
+        --destClip.w;
+      if (m_proj.scaleY() < 1.0)
+        --destClip.h;
+
+      IntersectClip clip(g, destClip);
+      if (clip)
+        g->drawSurface(rendered.get(), gfx::Rect(0, 0, rc2.w, rc2.h), dest, sampling, &p);
     }
     else {
       g->drawSurface(rendered.get(),
@@ -2537,6 +2563,16 @@ void Editor::onBeforeLayerEditableChange(DocEvent& ev, bool newState)
     m_state->onBeforeLayerEditableChange(this, ev.layer(), newState);
 }
 
+void Editor::onBeforeSlicesDuplication(DocEvent& ev)
+{
+  clearSlicesSelection();
+}
+
+void Editor::onSliceDuplicated(DocEvent& ev)
+{
+  selectSlice(ev.slice());
+}
+
 void Editor::setCursor(const gfx::Point& mouseDisplayPos)
 {
   bool used = false;
@@ -2735,7 +2771,7 @@ void Editor::pasteImage(const Image* image, const Mask* mask, const gfx::Point* 
   ASSERT(image);
 
   std::unique_ptr<Mask> temp_mask;
-  if (!mask) {
+  if (!mask || mask->bounds().isEmpty()) {
     gfx::Rect visibleBounds = getVisibleSpriteBounds();
     gfx::Rect imageBounds = image->bounds();
 

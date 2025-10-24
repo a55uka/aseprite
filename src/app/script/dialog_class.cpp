@@ -32,6 +32,7 @@
 #include "base/fs.h"
 #include "base/paths.h"
 #include "base/remove_from_container.h"
+#include "ui/app_state.h"
 #include "ui/box.h"
 #include "ui/button.h"
 #include "ui/combobox.h"
@@ -59,6 +60,8 @@
 namespace app { namespace script {
 
 using namespace ui;
+
+static constexpr const int kDefaultAutofit = ui::LEFT | ui::TOP;
 
 namespace {
 
@@ -107,6 +110,7 @@ struct Dialog {
   std::map<std::string, ui::Widget*> dataWidgets;
   std::map<std::string, ui::Widget*> labelWidgets;
   int currentRadioGroup = 0;
+  int autofit = kDefaultAutofit;
 
   // Member used to hold current state about the creation of a tabs
   // widget. After creation it is reset to null to be ready for the
@@ -127,12 +131,13 @@ struct Dialog {
   int showRef = LUA_REFNIL;
   lua_State* L = nullptr;
 
-  Dialog(const ui::Window::Type windowType, const std::string& title)
+  Dialog(const ui::Window::Type windowType, const std::string& title, bool sizeable)
     : window(windowType, title)
     , grid(2, false)
     , currentGrid(&grid)
   {
     window.addChild(&grid);
+    window.setSizeable(sizeable);
     all_dialogs.push_back(this);
   }
 
@@ -192,12 +197,20 @@ struct Dialog {
       it->second->setText(text);
   }
 
+  void setAutofit(int align)
+  {
+    // Accept both 0 or a valid subset of align parameters.
+    if (align == 0 || (align & (ui::LEFT | ui::RIGHT | ui::TOP | ui::BOTTOM)))
+      autofit = align;
+  }
+
   Display* parentDisplay() const
   {
     Display* parentDisplay = window.parentDisplay();
     if (!parentDisplay) {
-      const auto mainWindow = App::instance()->mainWindow();
-      parentDisplay = mainWindow->display();
+      const auto* mainWindow = App::instance()->mainWindow();
+      if (mainWindow)
+        parentDisplay = mainWindow->display();
     }
     return parentDisplay;
   }
@@ -209,6 +222,9 @@ struct Dialog {
     // origin/scale (or main window if a parent window wasn't specified).
     if (window.ownDisplay()) {
       const Display* parentDisplay = this->parentDisplay();
+      if (!parentDisplay)
+        return bounds;
+
       const int scale = parentDisplay->scale();
       const gfx::Point dialogOrigin = window.display()->nativeWindow()->contentRect().origin();
       const gfx::Point mainOrigin = parentDisplay->nativeWindow()->contentRect().origin();
@@ -219,10 +235,17 @@ struct Dialog {
 
   void setWindowBounds(const gfx::Rect& rc)
   {
+    // Avoid accessing parent displays and windows while the app is closing.
+    if (ui::get_app_state() != ui::AppState::kNormal)
+      return;
+
     if (window.ownDisplay()) {
       window.expandWindow(rc.size());
 
       Display* parentDisplay = this->parentDisplay();
+      if (!parentDisplay)
+        return;
+
       const int scale = parentDisplay->scale();
       const gfx::Point mainOrigin = parentDisplay->nativeWindow()->contentRect().origin();
       gfx::Rect frame = window.display()->nativeWindow()->contentRect();
@@ -230,8 +253,10 @@ struct Dialog {
       window.display()->nativeWindow()->setFrame(frame);
     }
     else {
+      gfx::Rect oldBounds(window.bounds());
       window.setBounds(rc);
       window.invalidate();
+      parentDisplay()->invalidateRect(oldBounds);
     }
   }
 
@@ -365,6 +390,8 @@ int Dialog_new(lua_State* L)
   // Get the title and the type of window (with or without title bar)
   ui::Window::Type windowType = ui::Window::WithTitleBar;
   std::string title = "Script";
+  bool sizeable = true;
+  int autofit = kDefaultAutofit;
   if (lua_isstring(L, 1)) {
     title = lua_tostring(L, 1);
   }
@@ -378,9 +405,21 @@ int Dialog_new(lua_State* L)
     if (type != LUA_TNIL && lua_toboolean(L, -1))
       windowType = ui::Window::WithoutTitleBar;
     lua_pop(L, 1);
+
+    type = lua_getfield(L, 1, "resizeable");
+    if (type != LUA_TNIL && !lua_toboolean(L, -1))
+      sizeable = false;
+    lua_pop(L, 1);
+
+    type = lua_getfield(L, 1, "autofit");
+    if (type != LUA_TNIL) {
+      autofit = lua_tointeger(L, -1);
+    }
+    lua_pop(L, 1);
   }
 
-  auto dlg = push_new<Dialog>(L, windowType, title);
+  auto dlg = push_new<Dialog>(L, windowType, title, sizeable);
+  dlg->setAutofit(autofit);
 
   // The uservalue of the dialog userdata will contain a table that
   // stores all the callbacks to handle events. As these callbacks can
@@ -1509,6 +1548,10 @@ int Dialog_modify(lua_State* L)
     type = lua_getfield(L, 2, "text");
     if (const char* s = lua_tostring(L, -1)) {
       widget->setText(s);
+
+      // Re-process mnemonics for buttons
+      if (widget->type() == WidgetType::kButtonWidget)
+        widget->processMnemonicFromText();
       relayout = true;
     }
     lua_pop(L, 1);
@@ -1626,6 +1669,10 @@ int Dialog_modify(lua_State* L)
     lua_pop(L, 1);
 
     type = lua_getfield(L, 2, "mouseCursor");
+    if (type == LUA_TNIL) {
+      lua_pop(L, 1);
+      type = lua_getfield(L, 2, "mousecursor");
+    }
     if (type != LUA_TNIL) {
       if (auto canvas = dynamic_cast<Canvas*>(widget)) {
         auto cursor = (ui::CursorType)lua_tointeger(L, -1);
@@ -1643,8 +1690,26 @@ int Dialog_modify(lua_State* L)
     if (relayout && !dlg->window.isResizing()) {
       dlg->window.layout();
 
-      gfx::Rect bounds(dlg->window.bounds().w, dlg->window.sizeHint().h);
-      dlg->window.expandWindow(bounds.size());
+      if (dlg->autofit > 0) {
+        gfx::Rect oldBounds = dlg->window.bounds();
+        gfx::Size resize(oldBounds.size());
+
+        if (dlg->autofit & ui::TOP || dlg->autofit & ui::BOTTOM)
+          resize.h = dlg->window.sizeHint().h;
+        if (dlg->autofit & ui::LEFT || dlg->autofit & ui::RIGHT)
+          resize.w = dlg->window.sizeHint().w;
+
+        gfx::Size difference = resize - oldBounds.size();
+        const auto& bounds = dlg->getWindowBounds();
+        gfx::Rect newBounds(bounds.x, bounds.y, resize.w, resize.h);
+
+        if (dlg->autofit & ui::BOTTOM)
+          newBounds.y = bounds.y - difference.h;
+        if (dlg->autofit & ui::RIGHT)
+          newBounds.x = bounds.x - difference.w;
+
+        dlg->setWindowBounds(newBounds);
+      }
     }
   }
   lua_pushvalue(L, 1);
@@ -1866,6 +1931,27 @@ int Dialog_get_bounds(lua_State* L)
   return 1;
 }
 
+int Dialog_get_sizeHint(lua_State* L)
+{
+  auto dlg = get_obj<Dialog>(L, 1);
+  push_new<gfx::Size>(L, dlg->window.sizeHint());
+  return 1;
+}
+
+int Dialog_get_autofit(lua_State* L)
+{
+  auto dlg = get_obj<Dialog>(L, 1);
+  lua_pushinteger(L, dlg->autofit);
+  return 1;
+}
+
+int Dialog_set_autofit(lua_State* L)
+{
+  auto dlg = get_obj<Dialog>(L, 1);
+  dlg->setAutofit(lua_tointeger(L, 2));
+  return 0;
+}
+
 int Dialog_set_bounds(lua_State* L)
 {
   auto dlg = get_obj<Dialog>(L, 1);
@@ -1907,9 +1993,11 @@ const luaL_Reg Dialog_methods[] = {
 };
 
 const Property Dialog_properties[] = {
-  { "data",   Dialog_get_data,   Dialog_set_data   },
-  { "bounds", Dialog_get_bounds, Dialog_set_bounds },
-  { nullptr,  nullptr,           nullptr           }
+  { "data",     Dialog_get_data,     Dialog_set_data    },
+  { "bounds",   Dialog_get_bounds,   Dialog_set_bounds  },
+  { "autofit",  Dialog_get_autofit,  Dialog_set_autofit },
+  { "sizeHint", Dialog_get_sizeHint, nullptr            },
+  { nullptr,    nullptr,             nullptr            }
 };
 
 } // anonymous namespace

@@ -225,7 +225,7 @@ private:
     LockButtons lock(this);
     // We need to create a copy of the shortcut because
     // Key::disableShortcut() will modify the shortcuts() collection itself.
-    ui::Shortcut shortcut = m_key->shortcuts()[index];
+    Shortcut shortcut = m_key->shortcuts()[index];
 
     if (ui::Alert::show(Strings::alerts_delete_shortcut(shortcut.toString())) != 1)
       return;
@@ -269,7 +269,7 @@ private:
 
     if (m_key && m_key->keycontext() != KeyContext::Any) {
       int w = m_headerItem->contextXPos() +
-              font()->textLength(convertKeyContextToUserFriendlyString(m_key->keycontext()));
+              font()->textLength(convert_keycontext_to_user_friendly_string(m_key->keycontext()));
       size.w = std::max(size.w, w);
     }
 
@@ -317,7 +317,7 @@ private:
 
     if (m_key && !m_key->shortcuts().empty()) {
       if (m_key->keycontext() != KeyContext::Any) {
-        g->drawText(convertKeyContextToUserFriendlyString(m_key->keycontext()),
+        g->drawText(convert_keycontext_to_user_friendly_string(m_key->keycontext()),
                     fg,
                     bg,
                     gfx::Point(contextXPos, y));
@@ -329,7 +329,7 @@ private:
         gfx::Rect(keyXPos, y, contextXPos - keyXPos, dh * m_key->shortcuts().size()));
       if (clip) {
         int i = 0;
-        for (const Shortcut& shortcut : m_key->shortcuts()) {
+        for (const AppShortcut& shortcut : m_key->shortcuts()) {
           if (i != m_hotShortcut || !m_changeButton) {
             g->drawText(getShortcutText(shortcut), fg, bg, gfx::Point(keyXPos, y));
           }
@@ -362,7 +362,7 @@ private:
         gfx::Rect bounds = this->bounds();
         MouseMessage* mouseMsg = static_cast<MouseMessage*>(msg);
 
-        const Shortcuts* shortcuts = (m_key ? &m_key->shortcuts() : NULL);
+        const AppShortcuts* shortcuts = (m_key ? &m_key->shortcuts() : nullptr);
         int y = bounds.y;
         int dh = textSize().h + 4 * guiscale();
         int maxi = (shortcuts && shortcuts->size() > 1 ? shortcuts->size() : 1);
@@ -457,7 +457,7 @@ private:
     m_hotShortcut = -1;
   }
 
-  std::string getShortcutText(const Shortcut& shortcut) const
+  std::string getShortcutText(const AppShortcut& shortcut) const
   {
     if (m_key && m_key->type() == KeyType::WheelAction && shortcut.isEmpty()) {
       return Strings::keyboard_shortcuts_default_action();
@@ -595,7 +595,7 @@ private:
         case KeyContext::MoveTool:
         case KeyContext::FreehandTool:
         case KeyContext::ShapeTool:
-          text = convertKeyContextToUserFriendlyString(key->keycontext()) + ": " + text;
+          text = convert_keycontext_to_user_friendly_string(key->keycontext()) + ": " + text;
           break;
       }
       KeyItem* keyItem = new KeyItem(m_keys, m_menuKeys, text, key, nullptr, 0, &m_headerItem);
